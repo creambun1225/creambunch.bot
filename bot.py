@@ -2,26 +2,35 @@ import discord
 from discord.ext import tasks
 import feedparser
 import os
+from flask import Flask
+from threading import Thread
 
 TOKEN = os.getenv("TOKEN")
 CHANNEL_ID = 1443792825711071292
 RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCFVRexFaAfmEKHzHhuWezrQ"
 
-last_video = None
+# Webサーバー（Render用）
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running"
+
+def run():
+    app.run(host='0.0.0.0', port=10000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
 
 intents = discord.Intents.default()
 client = discord.Client(intents=intents)
 
+last_video = None
+
 @client.event
 async def on_ready():
-    global last_video
-
     print("Bot起動！")
-
-    feed = feedparser.parse(RSS_URL)
-    if feed.entries:
-        last_video = feed.entries[0].id
-
     check_youtube.start()
 
 @tasks.loop(minutes=1)
@@ -35,6 +44,10 @@ async def check_youtube():
 
     video = feed.entries[0]
 
+    if last_video is None:
+        last_video = video.id
+        return
+
     if video.id != last_video:
         last_video = video.id
 
@@ -43,13 +56,15 @@ async def check_youtube():
 
         channel = client.get_channel(CHANNEL_ID)
 
-        await channel.send(
-            f""" youtubeにクリームパンの動画がアップされたよ!!
+        if channel:
+            await channel.send(
+                f"""youtubeにクリームパンの動画がアップされたよ!!
 みんな見てね!!
 
 【{title}】
 
 {url}"""
-        )
+            )
 
+keep_alive()
 client.run(TOKEN)
